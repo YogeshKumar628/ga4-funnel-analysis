@@ -88,13 +88,18 @@ The naive design — randomly assign users to the cart or direct path — is imp
 |---|---|
 | **Hypothesis** | Adding an order-review step before payment on the direct path increases checkout-to-purchase conversion |
 | **Primary metric** | Checkout → purchase conversion, direct-path users |
-| **Guardrail** | Median time from `begin_checkout` to `purchase` |
+| **Guardrail** | Total purchase volume (both paths); checkout abandonment rate |
 | **MDE** | 4pp (37.1% → 41.1%) |
 | **α / power** | 0.05 / 0.80, two-sided |
 | **Sample** | 2,334 per arm |
-| **Duration** | 16 weeks (whole weeks — weekend traffic is consistently lower) |
+| **Duration** | 18 weeks (16 exposure + 2-week conversion window) |
 
 **Why not the faster option.** Running on all checkout users at the same MDE takes 7 weeks. It was rejected because cart-path users already see a review page: if the true effect is 4pp among direct users and zero among cart users, the blended effect is ~1.7pp, which a test powered for 4pp would likely miss — 7 weeks spent producing an uninterpretable null. Powering the blended test for 2pp instead takes 26 weeks, longer than testing the target population directly.
+
+**Pre-analysis check.** Arm allocation is tested for sample ratio mismatch
+(chi-square against 50/50, threshold p < 0.001) before the primary metric is
+examined. A mismatch means the arms are not comparable and the data is discarded
+rather than adjusted.
 
 Decisions for each outcome — ship, revert, or redirect effort to the top of the funnel — are fixed in advance in `notebooks/02_experiment_design.ipynb`, so no result can be rationalised after the fact.
 
@@ -121,6 +126,7 @@ Both SQL files open with their purpose and close with the findings drawn from th
 - **Conversion is not stationary.** November 2.19%, December 2.05%, January 1.13%. Purchases fall off a cliff on 18–19 December, consistent with a Christmas shipping cutoff. The full window is used for the headline funnel because there are only 4,419 purchasers in total; period-stratified validation is run separately.
 - **Tablet is 2.3% of traffic**, so its bottom-funnel rates are low-sample and reported with that caveat rather than treated as findings.
 - **Two subgroups are too thin to measure precisely.** Recovery shows the largest gap (18.4pp) but on 206 users, with a CI of [10.7, 26.1]; CPC similar. These confirm the gap exists in those segments; they do not measure its size there.
+- **The trough period shows a weaker effect** — 8.53pp with Cohen's h = 0.171, against a pooled 0.292. It is the only subgroup that would fail a Bonferroni-corrected threshold (p = 0.010 against 0.0071). This could be real, since the trough was a lower-traffic, higher-intent period, or noise on 301 direct-path users. Its confidence interval [2.09, 14.97] contains the pooled estimate, so the two cannot be distinguished from this data.
 - **Seven subgroup tests at α = 0.05** give ~30% chance of at least one false positive. Under a Bonferroni correction (0.0071), six of seven still pass.
 
 ---
