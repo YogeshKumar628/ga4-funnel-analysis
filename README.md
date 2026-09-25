@@ -14,6 +14,44 @@ Only 1.6% of visitors to this store buy anything. Where do they leave, which seg
 
 **1. The obvious funnel was wrong.** 1,504 purchasers — 34% of all buyers — reached purchase without ever firing `add_to_cart`, while every single one of the 4,419 purchasers fired `begin_checkout`. Broken tracking would scatter failures across steps; instead the later steps are 100% complete and only `add_to_cart` is missing. That indicates a second route into checkout, so `add_to_cart` was demoted from a funnel gate to a path attribute and the funnel rebuilt.
 
+```mermaid
+flowchart TD
+    A["All users<br/>270,154"] --> B["Viewed item<br/>61,252 · 22.7%"]
+    B --> C["Began checkout<br/>9,715 · 3.6% of all users"]
+
+    C --> D["Via cart<br/>5,657"]
+    C --> E["Direct to checkout<br/>4,058"]
+
+    D --> F["Added payment<br/>3,654 · 64.6%"]
+    E --> G["Added payment<br/>2,096 · 51.7%"]
+
+    F --> H["Purchased<br/>2,915"]
+    G --> I["Purchased<br/>1,504"]
+
+    H --> J["51.5% of cart-path<br/>checkout users"]
+    I --> K["37.1% of direct-path<br/>checkout users"]
+
+    style D fill:#4C72B0,color:#fff
+    style F fill:#4C72B0,color:#fff
+    style H fill:#4C72B0,color:#fff
+    style J fill:#4C72B0,color:#fff
+    style E fill:#DD8452,color:#fff
+    style G fill:#DD8452,color:#fff
+    style I fill:#DD8452,color:#fff
+    style K fill:#DD8452,color:#fff
+```
+
+The branch percentages are calculated against each path's own checkout base, not
+against all users. `add_to_cart` is a path attribute rather than a funnel step:
+34% of purchasers never fired it, while every purchaser fired `begin_checkout`.
+
+Two counts do not nest perfectly, by design. One user reached `add_payment_info`
+without firing `begin_checkout`, so the two branch arms sum to 5,750 against the
+overall 5,751. And 25 purchasers never fired `view_item`. The funnel uses an
+"ever reached this step" definition rather than strict event ordering —
+validated in `sql/02_funnel_analysis.sql`, Query 2, where ordering violations
+were negligible for every step except the cart bypass.
+
 **2. Cart-path users convert 14.5pp better.** Among users who reached checkout: 51.5% of cart users purchased, against 37.1% of direct users. 95% CI [12.49, 16.44], p < 0.001, Cohen's h = 0.29 — a 39% relative difference.
 
 ![Conversion by checkout path](outputs/path_conversion.png)
