@@ -2,9 +2,7 @@
 
 **A third of buyers on this store reach checkout without ever using the cart, and they convert 14.5 percentage points worse when they do.** This project isolates that gap, tests it against every available confounder, and designs the experiment needed to establish whether the path causes it — or whether it simply reflects who chooses each path.
 
-Dataset: [Google Analytics 4 obfuscated sample e-commerce](https://console.cloud.google.com/marketplace/product/bigquery-public-data/ga4-obfuscated-sample-ecommerce), 4.3M events from 270,154 users, November 2020 – January 2021.
-
----
+Dataset: [Google Analytics 4 obfuscated sample e-commerce](https://support.google.com/analytics/answer/10937659) — a GA4 export from the Google Merchandise Store, available through BigQuery's public datasets as `bigquery-public-data.ga4_obfuscated_sample_ecommerce`. 4.3M events from 270,154 users, November 2020 – January 2021.---
 
 ## The question
 
