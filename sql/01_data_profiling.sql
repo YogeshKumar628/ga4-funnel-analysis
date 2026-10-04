@@ -25,10 +25,8 @@ ORDER BY event_count DESC;
 
 
 -- QUERY 2 -- Segment coverage
--- Checks whether device.category and traffic_source.medium are actually populated
--- before any segment analysis is built on them. Crossed together rather than run
--- separately, so field coverage and the interaction between the two are visible at
--- once.
+-- Checks whether device. category and traffic_source.medium are actually populated before any segment analysis is built on them. Crossed together rather than run separately, so field coverage and the interaction 
+-- between the two are visible at once.
 
 SELECT
     device.category AS device_category,
@@ -42,10 +40,8 @@ LIMIT 30;
 
 
 -- QUERY 3 -- Daily volume and continuity
--- Checks for missing days and establishes what a normal day looks like. Needed
--- before asking whether a drop-off holds across time or comes from a few outlier
--- days. COUNTIF counts rows where the condition is true -- the same pattern builds
--- the per-user funnel flags below.
+-- Checks for missing days and establishes what a normal day looks like. Needed before asking whether a drop-off holds across time or comes from a few outlier days. COUNTIF counts rows where 
+-- the condition is true -- the same pattern builds the per-user funnel flags in 02_funnel_analysis.sql.
 
 SELECT
     event_date,
@@ -58,10 +54,8 @@ ORDER BY event_date;
 
 
 -- QUERY 4 -- Raw row inspection
--- Looks at actual rows rather than aggregates, to confirm the grain of the table
--- (one row per event, with user and context attached to every row) and to see which
--- flat columns are populated. ecommerce.purchase_revenue is NULL on every event
--- except purchase, which is correct behaviour, not missing data.
+-- Looks at actual rows rather than aggregates, to confirm the grain of the table (one row per event, with user and context attached to every row) and to see which flat columns are populated. ecommerce.purchase_revenue is 
+-- NULL on every event except purchase, which is correct behaviour, not missing data.
 
 SELECT
     event_date,
@@ -79,9 +73,7 @@ LIMIT 50;
 
 
 -- QUERY 5 -- One user's full journey
--- Picks a single purchaser and lists every event they fired in timestamp order, to
--- see whether a real journey matches the assumed funnel. Aggregates hide sequence;
--- this is the fastest way to sanity-check the funnel definition against reality.
+-- Picks a single purchaser and lists every event they fired in timestamp order, to see whether a real journey matches the assumed funnel. Aggregates hide sequence; this is the fastest way to sanity-check the funnel definition against reality.
 
 WITH one_buyer AS (
     SELECT user_pseudo_id
@@ -102,10 +94,8 @@ ORDER BY event_timestamp;
 
 
 -- QUERY 6 -- Basic integrity check
--- Checks for null identifiers and exact-duplicate events (same user, same event,
--- same microsecond). NOTE: This check is too narrow -- it only catches events firing
--- at the identical timestamp, and missed the real duplicates found in Query 8,
--- which fire seconds apart. Kept here because the null checks are still useful and
+-- Checks for null identifiers and exact-duplicate events (same user, same event, same microsecond). 
+-- NOTE: This check is too narrow -- it only catches events firing at the identical timestamp, and misses the real duplicates found in Query 8, which fire seconds apart. Kept here because the null checks are still useful and
 -- because the limitation is worth knowing.
 
 SELECT
@@ -119,9 +109,7 @@ WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20210131';
 
 
 -- QUERY 7 -- Purchase events per user
--- The single-user journey showed two purchase events 77 seconds apart with
--- identical revenue, which suggested duplicate firing. This measures how widespread
--- that is, across all purchasers, rather than generalising from one example.
+-- The single-user journey showed two purchase events 77 seconds apart with identical revenue, which suggested duplicate firing. This measures how widespread that is, across all purchasers, rather than generalising from one example.
 
 SELECT
     purchases_per_user,
@@ -140,9 +128,8 @@ ORDER BY purchases_per_user;
 
 
 -- QUERY 8 -- Transaction ID integrity
--- Separates two different explanations for users with many purchase events: genuine
--- repeat buying (each event has its own transaction ID) versus duplicate firing or
--- placeholder IDs. This is what determines whether revenue can be used at all.
+-- Separates two different explanations for users with many purchase events: genuine repeat buying (each event has its own transaction ID) versus duplicate firing or placeholder IDs. 
+-- This is what determines whether revenue can be used at all.
 
 SELECT
     COUNT(*) AS purchase_events,
@@ -157,60 +144,48 @@ WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20210131'
 
 -- =============================================================================
 -- FINDINGS
+-- (Profiling stage. The funnel definition and device plan were later revised in 02_funnel_analysis.sql -- marked [REVISED] below.)
 --
--- FUNNEL DEFINITION
--- Steps: all users -> view_item -> add_to_cart -> begin_checkout ->
--- add_payment_info -> purchase. begin_checkout (9,715 users) and add_shipping_info
--- (9,714) differ by one user, so they fire together and are collapsed into one step
--- rather than counted as two separate customer decisions.
--- Denominator is total_users (270,154), not page_view (269,792). The 362-user gap
--- is users who fired events without a page_view (~0.13%, immaterial).
---
+-- FUNNEL
+-- * Steps: all users -> view_item -> add_to_cart -> begin_checkout -> add_payment_info -> purchase
+-- * begin_checkout (9,715) and add_shipping_info (9,714) fire together -> collapsed into one step
+-- * Denominator = total_users (270,154), not page_view (269,792)
+-- * [REVISED] add_to_cart is a path attribute, not a step -- 34% of purchasers never fired it (02, Query 3)
+
 -- SEGMENTATION
--- device.category is 100% clean (desktop ~192k, mobile ~132k, tablet ~7.5k) and
--- becomes the primary dimension. traffic_source.medium is ~79% usable; '(none)'
--- means direct traffic and is kept, while <Other> and (data deleted) (~21%) are
--- excluded from source-level analysis. New-vs-returning is dropped -- ~96% of users
--- are first-time visitors, so the returning group is too small to compare.
--- Tablet is only ~2.3% of traffic, so its bottom-funnel rates are low-sample and
--- are reported with a warning rather than treated as findings.
--- Desktop skews organic, mobile skews direct -- this interaction is the confounder
--- to test when any device gap appears.
---
+-- * Device: no placeholders -> primary dimension
+--   desktop 156,905 | mobile 107,175 | tablet 6,074 (first-event device, 02 Q7)
+--   Do NOT sum Query 2's rows -- users appear in several rows, inflating totals
+-- * Traffic medium = channel that FIRST ACQUIRED the user
+--   ~1/5 are placeholders (<Other>, (data deleted)) -> excluded
+--   '(none)' = direct traffic -> kept
+-- * New vs returning: dropped -- ~96% first arrived within the window
+-- * Tablet (2.2% of users): low-sample, reported with a warning only
+-- * [REVISED] No device gap exists: desktop 1.60%, mobile 1.68%, tablet 1.63% end-to-end (02, Query 7)
+
 -- TIME
--- All 92 days present, no gaps. Conversion is not stationary: Nov 2.19%, Dec 2.05%,
--- Jan 1.13%. Purchases fall off a cliff on Dec 18/19 (consistent with a Christmas
--- shipping cutoff) and stay low until mid-January. Weekends are consistently
--- quieter, so any A/B test designed on this data must run in whole weeks.
--- Decision: use the full 92 days for the headline funnel (only 4,419 purchasers
--- total, so restricting further leaves too little), then validate the device gap
--- separately within gift season and within the trough.
---
+-- * All 92 days present, no gaps
+-- * Purchase events per daily user: Nov 2.19% | Dec 2.05% | Jan 1.13% (relative indicator only, not a true conversion rate)
+-- * Purchase cliff on Dec 18/19 -- Christmas shipping cutoff
+-- * Full 92 days used for the funnel (only 4,419 purchasers), with findings validated separately per period
+
 -- EVENT INTEGRITY
--- No null user_pseudo_id or event_name across 4,295,584 events.
--- Purchase events are NOT reliable as an order count:
---   - 5,692 raw purchase events across 4,419 users
---   - 906 events (15.9%) have no usable transaction ID (23 NULL + 883 '(not set)')
---   - of the 4,786 events with a real ID, only 4,451 are distinct -> 335 excess
---     events, a 7.0% duplication rate among verifiable transactions
---   - 450 events (7.9%) have no revenue value at all
--- 82.5% of purchasers (3,644 of 4,419) have exactly one purchase event, so the
--- problem is concentrated in the remaining 17%.
---
--- CONSEQUENCE FOR THE ANALYSIS
--- The funnel is unaffected -- it counts distinct users per step, so duplicate events
--- cannot inflate it. Revenue-based opportunity sizing is REJECTED: with 16% of
--- purchase events unattributable and 8% missing revenue, any dollar figure carries
--- a large unquantifiable error. Opportunity is sized in USERS instead (e.g. if
--- mobile converted at desktop's payment-step rate, N more users would have
--- purchased), computed entirely from clean distinct-user counts.
---
+-- * No NULL user IDs or event names (4,295,584 events)
+-- * Query 6 missed the real duplicates -- it only catches same-microsecond events
+-- * Purchase events are NOT a reliable order count:
+--     5,692 purchase events
+--     - 906 with no usable transaction ID (15.9%)
+--     = 4,786 with a real ID -> 4,451 distinct -> 335 duplicates (7.0%)
+--     450 events with no revenue (7.9%)
+
+-- DECISIONS THIS DROVE
+-- * Funnel is unaffected -- it counts distinct users, immune to duplicates
+-- * No revenue figure reported anywhere
+-- * Only opportunity figure is an UPPER BOUND: 4,058 x 14.47pp = ~587 extra
+--   purchasers over 92 days, IF the whole gap were caused by the path
+--   (unlikely -- self-selection is probably a large part of it)
+
 -- LIMITATIONS
--- 1. Data is obfuscated by Google. Absolute rates are NOT the real store's rates;
---    only relative comparisons between steps and segments are trustworthy.
--- 2. user_pseudo_id is a device-level cookie ID, so the same person on phone and
---    laptop counts as two users. Sessions per user is ~1.33 over 92 days, which is
---    implausibly low for a real store and reflects this.
--- 3. ~21% of traffic_source.medium and ~16% of purchase transaction IDs are
---    placeholder values and are excluded where relevant.
+-- * Obfuscated by Google (method unpublished) -- trust relative comparisons, not absolute rates or counts
+-- * user_pseudo_id is device-level: one person on two devices = two users
 -- =============================================================================
