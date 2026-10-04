@@ -2,26 +2,17 @@
 -- 01_data_profiling.sql
 -- GA4 Funnel Drop-off Analysis -- Data Profiling
 -- Dataset: bigquery-public-data.ga4_obfuscated_sample_ecommerce (Nov 2020 - Jan 2021)
---
--- PURPOSE
--- Profile and quality-check the data before building the funnel. These queries
--- establish which events exist and which form the purchase funnel, whether the
--- segmentation fields are populated enough to use, whether the 92-day window is
--- continuous and stable, and whether the event stream itself is trustworthy.
--- A funnel built on a rarely-fired event, or a metric built on duplicated events,
--- looks clean and means nothing.
---
--- Note on cleaning: this is a read-only public dataset, so cleaning cannot be a
--- mutation step. Instead every exclusion is expressed as a filter inside the query
--- and documented here, which keeps the raw data intact and every decision visible.
+
+-- PURPOSE:
+-- Profile and quality-check the data before building the funnel. These queries establish which events exist and which form the purchase funnel, whether the segmentation fields are populated enough to use, 
+-- and whether the 92-day window is continuous and stable, and whether the event stream itself is trustworthy. A funnel built on a rarely fired event, or a metric built on duplicate events, looks clean but means nothing.
+
+-- Note on cleaning: this is a read-only public dataset, so cleaning cannot be a mutation step. Instead, every exclusion is expressed as a filter inside the query and documented here, which keeps the raw data intact and every decision visible.
 -- =============================================================================
 
-
 -- QUERY 1 -- Event profile
--- Lists every event type with event counts and unique user counts, to identify the
--- purchase funnel steps. Unique users matters more than event count here, because a
--- funnel measures the share of people reaching each step, not how often an event
--- fired.
+-- Lists every event type with event counts and unique user counts, to identify the purchase funnel steps. Unique users matter more than event count here, because a funnel measures the share of people reaching each step, 
+-- not how often an event fired.
 
 SELECT
     event_name,
@@ -112,7 +103,7 @@ ORDER BY event_timestamp;
 
 -- QUERY 6 -- Basic integrity check
 -- Checks for null identifiers and exact-duplicate events (same user, same event,
--- same microsecond). NOTE: this check is too narrow -- it only catches events firing
+-- same microsecond). NOTE: This check is too narrow -- it only catches events firing
 -- at the identical timestamp, and missed the real duplicates found in Query 8,
 -- which fire seconds apart. Kept here because the null checks are still useful and
 -- because the limitation is worth knowing.
@@ -130,7 +121,7 @@ WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20210131';
 -- QUERY 7 -- Purchase events per user
 -- The single-user journey showed two purchase events 77 seconds apart with
 -- identical revenue, which suggested duplicate firing. This measures how widespread
--- that is across all purchasers, rather than generalising from one example.
+-- that is, across all purchasers, rather than generalising from one example.
 
 SELECT
     purchases_per_user,
