@@ -1,15 +1,13 @@
 -- =============================================================================
 -- 02_funnel_analysis.sql
--- GA4 Funnel Drop-off Analysis -- Funnel Construction and Segmentation
--- Dataset: bigquery-public-data.ga4_obfuscated_sample_ecommerce (Nov 2020 - Jan 2021)
---
+
 -- PURPOSE
 -- Build the purchase funnel, validate its definition against how users actually
 -- behave, and test whether any drop-off differs by segment. The funnel definition
 -- arrived at here is NOT the one this file starts with -- Query 3 showed that a
--- third of purchasers bypass add_to_cart entirely, which forced a rebuild.
+-- third of purchasers bypass add_to_cart entirely, which led to a rebuild.
 --
--- DESIGN DECISIONS (both are standard interview questions)
+-- DESIGN DECISIONS
 -- 1. User-level, not session-level. ~96% of users are first-time visitors with
 --    ~1.33 sessions each over 92 days, so the two definitions nearly collapse into
 --    one another; where they differ, user-level does not split a single buying
@@ -52,8 +50,7 @@ FROM user_steps;
 
 -- QUERY 2 -- Event ordering violations
 -- Tests the "ever fired" decision. MIN(CASE WHEN ... THEN event_timestamp END) gives
--- each user's earliest timestamp per event (no ELSE, so non-matching rows are NULL
--- and MIN skips them). Each COUNTIF then counts one kind of violation: doing a step
+-- each user's earliest timestamp per event. Each COUNTIF then counts one kind of violation: doing a step
 -- without the previous one, or doing it before the previous one.
 
 WITH user_first_times AS (
@@ -107,10 +104,8 @@ ORDER BY users DESC;
 
 
 -- QUERY 4 -- Time from first item view to purchase
--- Tests the user-level decision. event_timestamp is in microseconds, so dividing by
--- 86,400,000,000 converts to days. APPROX_QUANTILES(x, 100) splits values into 100
--- buckets and returns the boundaries; [OFFSET(50)] is the median, [OFFSET(90)] the
--- 90th percentile. Median and p90 matter more than the mean on a skewed distribution.
+-- Tests the user-level decision. event_timestamp is in microseconds, so dividing by 86,400,000,000 converts to days. APPROX_QUANTILES(x, 100) splits values into 100
+-- buckets and returns the boundaries; [OFFSET(50)] is the median, [OFFSET(90)] the 90th percentile. Median and p90 matter more than the mean on a skewed distribution.
 
 WITH user_journey AS (
     SELECT
@@ -131,10 +126,8 @@ WHERE first_purchase IS NOT NULL AND first_view IS NOT NULL;
 
 
 -- QUERY 5 -- Cart path vs direct path
--- With add_to_cart reclassified from a funnel gate to a path attribute, this
--- compares conversion between users who reached checkout via the cart and those who
--- went straight there. SAFE_DIVIDE returns NULL instead of erroring on a zero
--- denominator.
+-- With add_to_cart reclassified from a funnel gate to a path attribute, this compares conversion between users who reached checkout via the cart and those who
+-- went straight there. SAFE_DIVIDE returns NULL instead of erroring on a zero denominator.
 
 WITH user_steps AS (
     SELECT
@@ -160,8 +153,7 @@ GROUP BY path_type;
 
 
 -- QUERY 6 -- How many users appear on more than one device
--- Device lives on every event row, not on the user, so a user with events on two
--- devices needs an assignment rule. This measures how often that situation arises
+-- Device lives on every event row, not on the user, so a user with events on two devices needs an assignment rule. This measures how often that situation arises
 -- before choosing one.
 
 SELECT
@@ -180,10 +172,8 @@ ORDER BY device_count;
 
 
 -- QUERY 7 -- Funnel by device
--- Assignment rule: each user takes the device from their EARLIEST event -- the
--- device they arrived on. Assigning device at purchase instead would bias the
--- comparison by labelling users where they ended up rather than where they started.
--- ROW_NUMBER() OVER (PARTITION BY user ORDER BY timestamp) numbers each user's
+-- Assignment rule: each user takes the device from their EARLIEST event -- the device they arrived on. Assigning the device at purchase instead would bias the
+-- comparison by labelling users where they ended up rather than where they started. ROW_NUMBER() OVER (PARTITION BY user ORDER BY timestamp) numbers each user's
 -- events chronologically, restarting per user; WHERE rn = 1 keeps the first.
 
 WITH user_device AS (
@@ -226,10 +216,8 @@ ORDER BY total_users DESC;
 
 
 -- QUERY 8 -- Path gap by time period
--- Checks whether the path gap is structural or a seasonal artefact. Users are bucketed
--- by the period of their FIRST event, so each user sits in exactly one period -- a
--- per-event assignment would place the same user in two periods and contaminate the
--- comparison. event_date is a YYYYMMDD string, which sorts lexically in the same order
+-- Checks whether the path gap is structural or a seasonal artefact. Users are bucketed by the period of their FIRST event, so each user sits in exactly one period, a
+-- per-event assignment would place the same user in two periods and contaminate the comparison. event_date is a YYYYMMDD string, which sorts lexically in the same order
 -- as chronologically, so string comparison is safe here.
 
 WITH user_first_event AS (
